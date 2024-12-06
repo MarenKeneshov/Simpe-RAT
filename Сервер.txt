@@ -1,0 +1,85 @@
+#include <iostream>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <string>
+
+#pragma comment(lib, "Ws2_32.lib")
+
+#define PORT (твой локальный порт)
+#define BUFFER_SIZE 1024
+
+int main() {
+    WSADATA wsaData;
+    SOCKET serverSocket, clientSocket;
+    struct sockaddr_in serverAddr, clientAddr;
+    int clientAddrLen = sizeof(clientAddr);
+    char buffer[BUFFER_SIZE] = { 0 };
+
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "WSAStartup failed\n";
+        return 1;
+    }
+
+    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cerr << "Socket creation failed\n";
+        WSACleanup();
+        return 1;
+    }
+
+    serverAddr.sin_family = AF_INET;
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
+    serverAddr.sin_port = htons(PORT);
+
+    if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+        std::cerr << "Bind failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (listen(serverSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cerr << "Listen failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Server is listening on port " << PORT << "...\n";
+
+    clientSocket = accept(serverSocket, (struct sockaddr*)&clientAddr, &clientAddrLen);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cerr << "Accept failed\n";
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    char clientIP[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, INET_ADDRSTRLEN);
+    std::cout << "Client connected: " << clientIP << "\n";
+
+    while (true) {
+        std::cout << "Enter command for client: ";
+        std::string command;
+        std::getline(std::cin, command);
+
+        if (send(clientSocket, command.c_str(), command.size(), 0) == SOCKET_ERROR) {
+            std::cerr << "Failed to send command\n";
+            break;
+        }
+
+        int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+        if (bytesReceived <= 0) {
+            std::cerr << "Failed to receive response or client disconnected\n";
+            break;
+        }
+
+        buffer[bytesReceived] = '\0';
+        std::cout << "Response from client: " << buffer << "\n";
+    }
+
+    closesocket(clientSocket);
+    closesocket(serverSocket);
+    WSACleanup();
+    return 0;
+}
