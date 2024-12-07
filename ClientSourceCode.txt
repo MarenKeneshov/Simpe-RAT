@@ -7,7 +7,7 @@
 #pragma comment(lib, "Ws2_32.lib")
 
 #define SERVER_DNS "your.dns.com" // DNS-адрес
-#define SERVER_PORT 7296              // Порт сервера, ёпты
+#define SERVER_PORT (serverport)              // Порт сервера, ёпты
 #define BUFFER_SIZE 1024
 
 std::wstring stringToWstring(const std::string& str) {
