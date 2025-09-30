@@ -8,7 +8,7 @@
 
 #define SERVER_DNS "your.dns.com" // DNS-адрес
 #define SERVER_PORT (serverport)              // Порт сервера, ёпты
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 std::wstring stringToWstring(const std::string& str) {
     int size_needed = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, nullptr, 0);
@@ -131,3 +131,4 @@ int main() {
     WSACleanup();
     return 0;
 }
+
