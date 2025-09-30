@@ -6,7 +6,7 @@
 #pragma comment(lib, "Ws2_32.lib")
 
 #define PORT (твой локальный порт)
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 int main() {
     WSADATA wsaData;
@@ -83,3 +83,4 @@ int main() {
     WSACleanup();
     return 0;
 }
+
